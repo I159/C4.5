@@ -6,18 +6,21 @@ import collections
 import functools
 import itertools
 import math
+import types
 
 
 class Tree(object):
     """Just a tree to make decisions."""
-    def __init__(self, node, target):
+    def __init__(self, node, target, thresholds):
         self.root_node = node
         self.target = target
+        self.thresholds = thresholds
 
     def make_decision(self, unclassified, node=None):
         """Decision process itself."""
         node = node or self.root_node
         try:
+            # TODO: use thresholds
             if unclassified[node['key']] == node['left_val']:
                 return self.make_decision(unclassified, node['left'])
             elif unclassified[node['key']] == node['right_val']:
@@ -42,34 +45,51 @@ class create_tree(object):
 
     Control nodes. Maintain learning process and making decisions process."""
 
+
     def __init__(self, learning_data, target):
         """Sort a training data relatively to a target feature.
-
         Sort a training data relatively to a target feature to determine
         the most bound features: the smaller entropy at the data sorted
         relative to the target feature, the more bound the feature to the
         target."""
 
+        self._verify_data(learning_data)
+
         self.target = target
         self.keys = self._get_verified_keys(learning_data)
-        self.learning_data = self._get_verified_data(learning_data)
+        self.length = len(learning_data)
+        self.discret_data = self._get_discret_data(learning_data)
+        self.data = learning_data
         self.root_node = None
         self._by_entropy = lambda x: x[0]
 
     def __call__(self):
         self._learn()
-        return Tree(self.root_node, self.target)
+        return Tree(self.root_node, self.target, self.thresholds)
 
-    def _get_verified_data(self, data):
+    def _get_thresholds(self, data):
+        keys = self.keys + [self.target]
+        val_sum = reduce(
+                lambda x, y: {k: float(x[k] + y[k]) for k in keys}, data)
+        return {k: v/self.length for k, v in val_sum.iteritems()}
+
+    @staticmethod
+    def _verify_data(data):
+        for i in set(itertools.chain(*(i.itervalues() for i in data))):
+            if not isinstance(i, (types.IntType, types.FloatType)):
+                raise ValueError(
+                        'Inconsistent data: data is not numeric.')
+
+    def _get_discret_data(self, data):
         """Check is data consistent."""
-        if len(set(itertools.chain(*(i.itervalues() for i in data)))) != 2:
-            raise ValueError(
-                    'Inconsistent data: data is not binary.')
+        thrs = self._get_thresholds(data)
+        to_disc = lambda x: {k: int(v >= thrs[k]) for k, v in x.iteritems()}
+        data = map(to_disc, data)
         return sorted(data, key=lambda x: x[self.target])
 
-    def _get_verified_keys(self, learning_data):
+    def _get_verified_keys(self, data):
         """Check for data consistency and return keys."""
-        keys = set(tuple(i.keys()) for i in learning_data)
+        keys = set(tuple(i.keys()) for i in data)
         if len(keys) == 1:
             keys = list(keys.pop())
             keys.remove(self.target)
@@ -79,9 +99,9 @@ class create_tree(object):
     def _get_probability(self, key, from_=None, to=None):
         """Get probability for a different values of a key on a slice."""
         if from_ is not None or to is not None:
-            the_slice = self.learning_data[from_:to]
+            the_slice = self.discret_data[from_:to]
         else:
-            the_slice = self.learning_data
+            the_slice = self.discret_data
 
         counter = {0: 0, 1: 0}
         for i in the_slice:
@@ -166,9 +186,9 @@ class create_tree(object):
     def _get_feature_values(self, key, from_, to, index):
         """The most probable value for a key on a node."""
         left = collections.Counter(
-                [i[key] for i in self.learning_data[from_: index]])
+                [i[key] for i in self.discret_data[from_: index]])
         right = collections.Counter(
-                [i[key] for i in self.learning_data[index: to]])
+                [i[key] for i in self.discret_data[index: to]])
         left_val = max(left, key=lambda k: left[k])
         right_val = max(right, key=lambda k: right[k])
 
@@ -189,7 +209,7 @@ class create_tree(object):
 
     def _learn(self):
         """Learn process itself."""
-        self.root_node = {'from': 0, 'to': len(self.learning_data)}
+        self.root_node = {'from': 0, 'to': self.length}
         leafs = [self.root_node]
 
         while self.keys:
@@ -214,7 +234,8 @@ class create_tree(object):
                 del leaf['to']
 
         for leaf in leafs:
-            leaf_data = self.learning_data[leaf['from']: leaf['to']]
-            target_value = collections.Counter(
-                i[self.target] for i in leaf_data)
-            leaf[self.target] = target_value.keys()[0]
+            leaf_data = self.data[leaf['from']: leaf['to']]
+            by_target = lambda x: x[self.target]
+            leaf[self.target] = (
+                    min(leaf_data, key=by_target),
+                    max(leaf_data, key=by_target))

@@ -4,7 +4,7 @@ import random
 import string
 import unittest
 
-import id3.tree as tree
+import C4_5.tree as tree
 
 
 class BaseTestCase(unittest.TestCase):
@@ -16,7 +16,8 @@ class BaseTestCase(unittest.TestCase):
 
     def gen_data(self, num_items, incons=False):
         while num_items:
-            item = {k: random.randint(0, 1) for k in self.keys}
+            dpns = iter(((0, 1), (0, 340), (120, 560), (1000, 10000)) * 4)
+            item = {k: random.randint(*next(dpns)) for k in self.keys}
             item[self.target] = sum(item.values()) % 2
             if incons:
                 del item['b']
