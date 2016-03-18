@@ -11,19 +11,18 @@ import types
 
 class Tree(object):
     """Just a tree to make decisions."""
-    def __init__(self, node, target, thresholds):
+    def __init__(self, node, target):
         self.root_node = node
         self.target = target
-        self.thresholds = thresholds
 
     def make_decision(self, unclassified, node=None):
         """Decision process itself."""
         node = node or self.root_node
         try:
-            # TODO: use thresholds
-            if unclassified[node['key']] == node['left_val']:
+            gt_thr = unclassified[node['key']] >= node['threshold']
+            if gt_thr is node['left_val']:
                 return self.make_decision(unclassified, node['left'])
-            elif unclassified[node['key']] == node['right_val']:
+            elif gt_thr is node['right_val']:
                 return self.make_decision(unclassified, node['right'])
         except KeyError:
             return node[self.target]
@@ -58,6 +57,7 @@ class create_tree(object):
         self.target = target
         self.keys = self._get_verified_keys(learning_data)
         self.length = len(learning_data)
+        self.thresholds = self._get_thresholds(learning_data)
         self.discret_data = self._get_discret_data(learning_data)
         self.data = learning_data
         self.root_node = None
@@ -65,7 +65,7 @@ class create_tree(object):
 
     def __call__(self):
         self._learn()
-        return Tree(self.root_node, self.target, self.thresholds)
+        return Tree(self.root_node, self.target)
 
     def _get_thresholds(self, data):
         keys = self.keys + [self.target]
@@ -82,8 +82,8 @@ class create_tree(object):
 
     def _get_discret_data(self, data):
         """Check is data consistent."""
-        thrs = self._get_thresholds(data)
-        to_disc = lambda x: {k: int(v >= thrs[k]) for k, v in x.iteritems()}
+        to_disc = lambda x: {
+                k: int(v >= self.thresholds[k]) for k, v in x.iteritems()}
         data = map(to_disc, data)
         return sorted(data, key=lambda x: x[self.target])
 
@@ -185,22 +185,13 @@ class create_tree(object):
 
     def _get_feature_values(self, key, from_, to, index):
         """The most probable value for a key on a node."""
-        left = collections.Counter(
-                [i[key] for i in self.discret_data[from_: index]])
-        right = collections.Counter(
-                [i[key] for i in self.discret_data[index: to]])
-        left_val = max(left, key=lambda k: left[k])
-        right_val = max(right, key=lambda k: right[k])
-
-        if left_val == right_val:
-            left_prob = left[left_val] / float(left[0] + left[1])
-            right_prob = right[right_val] / float(right[0] + right[1])
-            if left_prob > right_prob:
-                right_val = abs(right_val - 1)
-            elif right_prob > left_prob:
-                left_val = abs(left_val - 1)
-
-        return left_val, right_val
+        sum_by_key = lambda x, y: {key: x[key]+y[key]}
+        left = reduce(sum_by_key, self.discret_data[from_:index])
+        right = reduce(sum_by_key, self.discret_data[index:to])
+        left_prob = left[key] / float(index - from_)
+        right_prob = right[key] / float(to - index)
+        left_v, right_v = (left_prob > right_prob, right_prob > left_prob)
+        return left_v, right_v
 
     @staticmethod
     def _if_splitable(leaf):
@@ -221,6 +212,7 @@ class create_tree(object):
                 leaf['leaf'] = True
             else:
                 leaf['key'] = key
+                leaf['threshold'] = self.thresholds[key]
                 leaf['left'] = {'from': leaf['from'], 'to': index}
                 leaf['right'] = {'from': index, 'to': leaf['to']}
                 leaf['left_val'], leaf['right_val'] = self._get_feature_values(
@@ -237,5 +229,5 @@ class create_tree(object):
             leaf_data = self.data[leaf['from']: leaf['to']]
             by_target = lambda x: x[self.target]
             leaf[self.target] = (
-                    min(leaf_data, key=by_target),
-                    max(leaf_data, key=by_target))
+                    min(leaf_data, key=by_target)[self.target],
+                    max(leaf_data, key=by_target)[self.target])

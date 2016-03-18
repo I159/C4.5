@@ -18,7 +18,7 @@ class BaseTestCase(unittest.TestCase):
         while num_items:
             dpns = iter(((0, 1), (0, 340), (120, 560), (1000, 10000)) * 4)
             item = {k: random.randint(*next(dpns)) for k in self.keys}
-            item[self.target] = sum(item.values()) % 2
+            item[self.target] = sum(item.values()) / 2**4
             if incons:
                 del item['b']
                 incons = False
@@ -52,7 +52,7 @@ class TestDecide(PreBuildTree):
         results = [i[self.target] for i in self.test_data]
         # Random generated data doesn't guarantee a good prediction. Use assert
         # for a real data.
-        print len([i for i in zip(predictions, results) if i[0] == i[1]])
+        print len([i for i in zip(predictions, results) if i[1]>=i[0][0] and i[1]<=i[0][1]])
 
     def test_inconsistence_data_prediction(self):
         # TODO: determine an error case.
