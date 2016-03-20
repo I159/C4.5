@@ -12,7 +12,6 @@ class BaseTestCase(unittest.TestCase):
         self.keys = [string.ascii_lowercase[i] for i in xrange(2**4)]
         self.target = 'result'
         self.learning_data = list(self.gen_data(1000))
-        self.inconsistance_data = list(self.gen_data(1000, True))
 
     def gen_data(self, num_items, incons=False):
         while num_items:
@@ -33,13 +32,17 @@ class PreBuildTree(BaseTestCase):
 
 
 class TestBuildTree(PreBuildTree):
+    def setUp(self):
+        super(TestBuildTree, self).setUp()
+        self.inconsistance_data = list(self.gen_data(1000, True))
+
     def test_tree_health(self):
         self.assertIsNotNone(self.tree.root_node['left'])
         self.assertIsNotNone(self.tree.root_node['right'])
 
     def test_inconsistence_data_init(self):
         self.assertRaises(ValueError,
-                tree.create_tree, self.inconsistence_data, self.target)
+                tree.create_tree, self.inconsistance_data, self.target)
 
 
 class TestDecide(PreBuildTree):
@@ -61,24 +64,26 @@ class TestDecide(PreBuildTree):
         results = [i[self.target] for i in self.test_data]
 
 
-class TestVerification(BaseTestCase):
+class TestDataPreparation(BaseTestCase):
     def setUp(self):
-        super(TestCreationMethods, self).setUp()
+        super(TestDataPreparation, self).setUp()
         self.ct = tree.create_tree.__decorated__(
                 self.learning_data, self.target)
-        self.not_binary_data = self.learning_data[:]
-        self.not_binary_data[1]['a'] = 3
+        self.not_numeric_data = self.learning_data[:]
+        self.not_numeric_data[1]['a'] = 'fvcl<'
+        import pdb; pdb.set_trace()
 
     def test_verify_data(self):
-        vd = self.ct._get_verified_data(self.learning_data)
-        self.assertEqual(
-                vd, sorted(self.learning_data, key=lambda x: x[self.target]))
+        try:
+            self.ct._verify_data(self.learning_data)
+        except Exception as e:
+            self.fail(e)
 
     def test_fail_data_verification(self):
         self.assertRaises(
                 ValueError,
-                self.ct._get_verified_data,
-                self.not_binary_data)
+                self.ct._verify_data,
+                self.not_numeric_data)
 
     def test_verify_keys(self):
         keys = set(self.learning_data[0].keys()) - set([self.target])
