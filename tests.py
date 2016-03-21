@@ -1,3 +1,4 @@
+import copy
 import cProfile
 import mock
 import random
@@ -69,9 +70,8 @@ class TestDataPreparation(BaseTestCase):
         super(TestDataPreparation, self).setUp()
         self.ct = tree.create_tree.__decorated__(
                 self.learning_data, self.target)
-        self.not_numeric_data = self.learning_data[:]
+        self.not_numeric_data = copy.deepcopy(self.learning_data)
         self.not_numeric_data[1]['a'] = 'fvcl<'
-        import pdb; pdb.set_trace()
 
     def test_verify_data(self):
         try:
@@ -91,8 +91,11 @@ class TestDataPreparation(BaseTestCase):
                 list(keys))
 
     def test_keys_verification_failed(self):
-        keys = set(self.learning_data[0].keys()) - set([self.target, 'a'])
-        self.assertRaises(ValueError, self.ct._get_verified_keys, keys)
+        del self.learning_data[1]['a']
+        self.assertRaises(
+                ValueError,
+                self.ct._get_verified_keys,
+                self.learning_data)
 
 
 class TestCreationMethods(unittest.TestCase):
@@ -131,9 +134,12 @@ class TestCreationMethods(unittest.TestCase):
 
 class TestDecisionMethod(PreBuildTree):
     def test_make_decision(self):
-        unclasified = self.gen_data(100)
-        res = map(self.tree.make_decision, unclasified)
-        self.assertEqual(len(set(res)), 2) # Since there is no real data we
+        unclassified = tuple(self.gen_data(100))
+        res = map(self.tree.make_decision, unclassified)
+        is_correct = [i for i, v in enumerate(unclassified)
+                if v['result'] >= res[i][0] and v['result'] <= res[i][1]]
+        print len(is_correct)
+        # Since there is no real data we
         # can't check result for correctness. All possible is to ensure
         # that we have different decisions.
 

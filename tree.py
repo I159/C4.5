@@ -61,7 +61,10 @@ class create_tree(object):
         self.discret_data = self._get_discret_data(learning_data)
         self.data = learning_data
         self.root_node = None
-        self._by_entropy = lambda x: x[0]
+        self._by_entropy = lambda x: x['entropy']
+
+        self.Leaf = collections.namedtuple('Leaf',
+                ('entropy', 'key', 'index', 'leaf', 'left', 'right'))
 
     def __call__(self):
         self._learn()
@@ -179,12 +182,10 @@ class create_tree(object):
         keys_by_entp = map(self._min_index(from_, to), self.keys)
         return min(keys_by_entp, key=self._by_entropy)
 
-    def _min_leaf(self, leaf):
-        """leaf node with a minimal entropy."""
-        return self._min_key(leaf['from'], leaf['to']) + (leaf, )
-
-    def _get_feature_values(self, key, from_, to, index):
+    def _get_feature_values(self, key, leaf, index):
         """The most probable value for a key on a node."""
+        from_ = leaf['from']
+        to = leaf['to']
         sum_by_key = lambda x, y: {key: x[key]+y[key]}
         left = reduce(sum_by_key, self.discret_data[from_:index])
         right = reduce(sum_by_key, self.discret_data[index:to])
@@ -193,6 +194,20 @@ class create_tree(object):
         left_v, right_v = (left_prob > right_prob, right_prob > left_prob)
         return left_v, right_v
 
+    def _get_leaf_data(self, leaf):
+        """leaf node with a minimal entropy."""
+        entropy, index, key = self._min_key(leaf['from'], leaf['to'])
+        left, right = self._get_feature_values(key, leaf, index)
+        leaf.update(dict(
+            entropy = entropy,
+            index=index,
+            key=key,
+            left={'from': leaf['from'], 'to': index},
+            right={'from': index, 'to': leaf['to']},
+            left_val=left,
+            right_val=right))
+        return leaf
+
     @staticmethod
     def _if_splitable(leaf):
         """Filter to determine a leafs able for further split."""
@@ -200,30 +215,35 @@ class create_tree(object):
 
     def _learn(self):
         """Learn process itself."""
+        gt_3 = lambda x: x['to'] - x['from'] > 3
+        is_patchy = lambda x: x['entropy'] > 0
+        is_prior = lambda x: x['left_val'] != x['right_val']
+
         self.root_node = {'from': 0, 'to': self.length}
         leafs = [self.root_node]
 
         while self.keys:
-            splitable = map(self._min_leaf, filter(self._if_splitable, leafs))
-            entropy, index, key, leaf = min(splitable, key=self._by_entropy)
-            self.keys.remove(key)
+            gt_3_items = filter(gt_3, leafs)
+            min_leaf_keys = map(self._get_leaf_data, gt_3_items)
+            heterogeneous = filter(is_patchy, min_leaf_keys)
+            prioritized = filter(is_prior, heterogeneous)
+            leaf = min(heterogeneous, key=self._by_entropy)
+            #self.keys.remove(key)
 
-            if entropy == 0:
-                leaf['leaf'] = True
-            else:
-                leaf['key'] = key
-                leaf['threshold'] = self.thresholds[key]
-                leaf['left'] = {'from': leaf['from'], 'to': index}
-                leaf['right'] = {'from': index, 'to': leaf['to']}
-                leaf['left_val'], leaf['right_val'] = self._get_feature_values(
-                    key, leaf['from'], leaf['to'], index)
+            #leaf['key'] = key
+            #leaf['threshold'] = self.thresholds[key]
+            #leaf['left'] = {'from': leaf['from'], 'to': index}
+            #leaf['right'] = {'from': index, 'to': leaf['to']}
+            #leaf['left_val'], leaf['right_val'] = self._get_feature_values(
+                #key, leaf['from'], leaf['to'], index)
 
-                for branch in ('left', 'right'):
-                    leafs.append(leaf[branch])
+            for branch in ('left', 'right'):
+                leafs.append(leaf[branch])
 
-                leafs.remove(leaf)
-                del leaf['from']
-                del leaf['to']
+            leafs.remove(leaf)
+            del leaf['from']
+            del leaf['to']
+            del leaf['entropy']
 
         for leaf in leafs:
             leaf_data = self.data[leaf['from']: leaf['to']]
