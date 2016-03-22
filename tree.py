@@ -89,7 +89,10 @@ class create_tree(object):
 
     def _get_verified_keys(self, data):
         """Check for data consistency and return keys."""
-        keys = set(tuple(i.keys()) for i in data)
+        try:
+            keys = set(tuple(i.keys()) for i in data)
+        except Exception:
+            import pdb; pdb.set_trace()
         if len(keys) == 1:
             keys = list(keys.pop())
             keys.remove(self.target)
@@ -206,17 +209,19 @@ class create_tree(object):
         while self.keys:
             splitable = map(self._min_leaf, filter(self._if_splitable, leafs))
             entropy, index, key, leaf = min(splitable, key=self._by_entropy)
+            left_v, right_v = self._get_feature_values(
+                    key, leaf['from'], leaf['to'], index)
             self.keys.remove(key)
 
-            if entropy == 0:
+            if entropy == 0 or left_v == right_v:
                 leaf['leaf'] = True
             else:
                 leaf['key'] = key
                 leaf['threshold'] = self.thresholds[key]
                 leaf['left'] = {'from': leaf['from'], 'to': index}
                 leaf['right'] = {'from': index, 'to': leaf['to']}
-                leaf['left_val'], leaf['right_val'] = self._get_feature_values(
-                    key, leaf['from'], leaf['to'], index)
+                leaf['left_val'] = left_v
+                leaf['right_val'] = right_v
 
                 for branch in ('left', 'right'):
                     leafs.append(leaf[branch])
@@ -231,3 +236,5 @@ class create_tree(object):
             leaf[self.target] = (
                     min(leaf_data, key=by_target)[self.target],
                     max(leaf_data, key=by_target)[self.target])
+            del leaf['from']
+            del leaf['to']
